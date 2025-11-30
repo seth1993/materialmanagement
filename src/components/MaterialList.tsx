@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/hooks/useAuth';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 interface Material {
   id: string;
@@ -10,9 +12,11 @@ interface Material {
   quantity: number;
   category: string;
   createdAt: Date;
+  userId: string;
 }
 
 export default function MaterialList() {
+  const { user, loading: authLoading } = useAuth();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [newMaterial, setNewMaterial] = useState({
     name: '',
@@ -21,31 +25,16 @@ export default function MaterialList() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Fetch materials from Firestore
+  // Fetch materials from Firestore for the current user
   const fetchMaterials = async () => {
-    if (!db) {
-      console.warn('Firebase not configured. Using demo data.');
-      setMaterials([
-        {
-          id: 'demo-1',
-          name: 'Steel Beams',
-          quantity: 50,
-          category: 'Construction',
-          createdAt: new Date(),
-        },
-        {
-          id: 'demo-2',
-          name: 'Concrete Mix',
-          quantity: 100,
-          category: 'Construction',
-          createdAt: new Date(),
-        },
-      ]);
+    if (!user || !db) {
+      setMaterials([]);
       return;
     }
 
     try {
-      const querySnapshot = await getDocs(collection(db, 'materials'));
+      const q = query(collection(db, 'materials'), where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
       const materialsData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -60,7 +49,7 @@ export default function MaterialList() {
   // Add new material to Firestore
   const addMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMaterial.name || !newMaterial.category) return;
+    if (!newMaterial.name || !newMaterial.category || !user) return;
 
     if (!db) {
       alert('Firebase not configured. This is a demo version.');
@@ -71,6 +60,7 @@ export default function MaterialList() {
     try {
       await addDoc(collection(db, 'materials'), {
         ...newMaterial,
+        userId: user.uid,
         createdAt: new Date(),
       });
       setNewMaterial({ name: '', quantity: 0, category: '' });
@@ -98,12 +88,58 @@ export default function MaterialList() {
   };
 
   useEffect(() => {
-    fetchMaterials();
-  }, []);
+    if (user) {
+      fetchMaterials();
+    }
+  }, [user]);
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <LoadingSpinner className="mx-auto mb-4" />
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 text-center">
+        <h1 className="text-3xl font-bold mb-8 text-gray-800">Material Management</h1>
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
+          <p className="text-gray-600 mb-6">
+            Please sign in to access your materials inventory.
+          </p>
+          <div className="space-x-4">
+            <a
+              href="/auth/login"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Sign In
+            </a>
+            <a
+              href="/auth/signup"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Sign Up
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-8 text-gray-800">Material Management</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-800">Material Management</h1>
+        <div className="text-sm text-gray-600">
+          Welcome, {user.displayName || user.email}
+        </div>
+      </div>
       
       {/* Add Material Form */}
       <form onSubmit={addMaterial} className="bg-white p-6 rounded-lg shadow-md mb-8">
