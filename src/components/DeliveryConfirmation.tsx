@@ -1,424 +1,388 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { PurchaseOrder, DeliveryConfirmationForm, DeliveryLineItemStatus } from '@/types/delivery';
-import { formatDeliveryDate } from '@/lib/delivery-utils';
-import { processDeliveryConfirmation } from '@/lib/delivery-service';
+import { PhotoUpload } from '@/components/PhotoUpload';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import DeliveryLineItem from './DeliveryLineItem';
+import { 
+  Shipment, 
+  MaterialReceivedForm, 
+  MaterialCondition,
+  DeliveryConfirmationForm 
+} from '@/types/delivery';
+import { 
+  createDelivery,
+  createShipmentEvent 
+} from '@/lib/delivery-utils';
+import { 
+  uploadMultiplePhotos, 
+  createDeliveryPhotos,
+  UploadProgress 
+} from '@/lib/storage-utils';
 
-export default function DeliveryConfirmation() {
-  const { user, loading: authLoading } = useAuth();
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+interface DeliveryConfirmationProps {
+  shipment: Shipment;
+  onComplete: () => void;
+  onCancel: () => void;
+}
+
+export function DeliveryConfirmation({ 
+  shipment, 
+  onComplete, 
+  onCancel 
+}: DeliveryConfirmationProps) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<number, UploadProgress>>({});
   
-  const [deliveryForm, setDeliveryForm] = useState<DeliveryConfirmationForm>({
-    purchaseOrderId: '',
-    deliveryDate: new Date(),
-    receivedBy: '',
-    lineItems: [],
-    notes: ''
+  const [formData, setFormData] = useState<DeliveryConfirmationForm>({
+    onSiteLocation: '',
+    notes: '',
+    materialsReceived: shipment.materials.map(material => ({
+      materialId: material.id,
+      actualQuantity: material.quantity,
+      condition: 'good' as MaterialCondition,
+      notes: '',
+    })),
+    photos: [],
   });
 
-  const [lineItemStatuses, setLineItemStatuses] = useState<Map<string, {
-    status: DeliveryLineItemStatus;
-    actualQuantity: number;
-    notes?: string;
-    damageDescription?: string;
-  }>>(new Map());
+  const handleMaterialChange = (index: number, field: keyof MaterialReceivedForm, value: any) => {
+    const updatedMaterials = [...formData.materialsReceived];
+    updatedMaterials[index] = {
+      ...updatedMaterials[index],
+      [field]: value,
+    };
+    setFormData({
+      ...formData,
+      materialsReceived: updatedMaterials,
+    });
+  };
 
-  const [errors, setErrors] = useState<string[]>([]);
-
-  // Fetch pending purchase orders
-  const fetchPendingPurchaseOrders = async () => {
-    if (!user || !db) {
-      setPurchaseOrders([]);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      setError('You must be logged in to confirm deliveries');
       return;
     }
 
+    if (!formData.onSiteLocation.trim()) {
+      setError('Please specify the on-site location');
+      return;
+    }
+
+    if (formData.photos.length === 0) {
+      setError('Please upload at least one photo of the delivery');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      const q = query(
-        collection(db, 'purchaseOrders'), 
-        where('userId', '==', user.uid),
-        where('status', 'in', ['pending', 'partial']),
-        orderBy('expectedDeliveryDate', 'asc')
+      // Generate temporary delivery ID for photo uploads
+      const tempDeliveryId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Upload photos first
+      const uploadResults = await uploadMultiplePhotos(
+        formData.photos,
+        tempDeliveryId,
+        (fileIndex, progress) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            [fileIndex]: progress,
+          }));
+        }
       );
-      const querySnapshot = await getDocs(q);
-      const poData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        expectedDeliveryDate: doc.data().expectedDeliveryDate?.toDate() || new Date(),
-      })) as PurchaseOrder[];
-      setPurchaseOrders(poData);
-    } catch (error) {
-      console.error('Error fetching purchase orders:', error);
+
+      // Create delivery photos
+      const deliveryPhotos = createDeliveryPhotos(uploadResults);
+
+      // Create delivery record
+      const deliveryId = await createDelivery({
+        shipmentId: shipment.id,
+        actualDeliveryDate: new Date(),
+        receivedBy: user.uid,
+        receivedByName: user.displayName || user.email || 'Unknown User',
+        onSiteLocation: formData.onSiteLocation.trim(),
+        notes: formData.notes.trim(),
+        photos: deliveryPhotos,
+        materialsReceived: formData.materialsReceived.map(material => {
+          const originalMaterial = shipment.materials.find(m => m.id === material.materialId);
+          return {
+            materialId: material.materialId,
+            materialName: originalMaterial?.name || 'Unknown Material',
+            expectedQuantity: originalMaterial?.quantity || 0,
+            actualQuantity: material.actualQuantity,
+            condition: material.condition,
+            notes: material.notes,
+          };
+        }),
+        status: 'confirmed',
+      });
+
+      // Create additional event for photos uploaded
+      if (deliveryPhotos.length > 0) {
+        await createShipmentEvent({
+          shipmentId: shipment.id,
+          deliveryId,
+          eventType: 'photos_uploaded',
+          userId: user.uid,
+          userName: user.displayName || user.email || 'Unknown User',
+          description: `${deliveryPhotos.length} photos uploaded for delivery confirmation`,
+          metadata: {
+            photoCount: deliveryPhotos.length,
+            location: formData.onSiteLocation,
+          },
+        });
+      }
+
+      onComplete();
+    } catch (err) {
+      console.error('Error confirming delivery:', err);
+      setError('Failed to confirm delivery. Please try again.');
     } finally {
       setLoading(false);
+      setUploadProgress({});
     }
   };
 
-  // Handle PO selection
-  const handlePOSelection = (poId: string) => {
-    const po = purchaseOrders.find(p => p.id === poId);
-    if (po) {
-      setSelectedPO(po);
-      setDeliveryForm({
-        purchaseOrderId: po.id,
-        deliveryDate: new Date(),
-        receivedBy: user?.displayName || user?.email || '',
-        lineItems: [],
-        notes: ''
-      });
-      
-      // Initialize line item statuses
-      const initialStatuses = new Map();
-      po.lineItems.forEach(item => {
-        initialStatuses.set(item.id, {
-          status: 'ok' as DeliveryLineItemStatus,
-          actualQuantity: item.expectedQuantity,
-          notes: '',
-          damageDescription: ''
-        });
-      });
-      setLineItemStatuses(initialStatuses);
-      setErrors([]);
-    }
+  const getConditionColor = (condition: MaterialCondition): string => {
+    const colors: Record<MaterialCondition, string> = {
+      good: 'bg-green-100 text-green-800',
+      damaged: 'bg-red-100 text-red-800',
+      missing: 'bg-gray-100 text-gray-800',
+      partial: 'bg-yellow-100 text-yellow-800',
+    };
+    return colors[condition];
   };
 
-  // Handle line item status change
-  const handleLineItemStatusChange = (
-    lineItemId: string, 
-    status: DeliveryLineItemStatus, 
-    actualQuantity: number, 
-    notes?: string, 
-    damageDescription?: string
-  ) => {
-    const newStatuses = new Map(lineItemStatuses);
-    newStatuses.set(lineItemId, {
-      status,
-      actualQuantity,
-      notes,
-      damageDescription
-    });
-    setLineItemStatuses(newStatuses);
-    
-    // Update delivery form line items
-    const updatedLineItems = Array.from(newStatuses.entries()).map(([poLineItemId, itemData]) => ({
-      poLineItemId,
-      status: itemData.status,
-      actualQuantity: itemData.actualQuantity,
-      notes: itemData.notes,
-      damageDescription: itemData.damageDescription
-    }));
-    
-    setDeliveryForm({
-      ...deliveryForm,
-      lineItems: updatedLineItems
-    });
+  const getConditionLabel = (condition: MaterialCondition): string => {
+    const labels: Record<MaterialCondition, string> = {
+      good: 'Good Condition',
+      damaged: 'Damaged',
+      missing: 'Missing',
+      partial: 'Partial Delivery',
+    };
+    return labels[condition];
   };
-
-  // Validate delivery form
-  const validateDeliveryForm = (): string[] => {
-    const formErrors: string[] = [];
-    
-    if (!deliveryForm.purchaseOrderId) {
-      formErrors.push('Please select a purchase order');
-    }
-    
-    if (!deliveryForm.receivedBy.trim()) {
-      formErrors.push('Please enter who received the delivery');
-    }
-    
-    if (deliveryForm.lineItems.length === 0) {
-      formErrors.push('Please confirm all line items');
-    }
-    
-    // Check if all line items have been processed
-    if (selectedPO && deliveryForm.lineItems.length !== selectedPO.lineItems.length) {
-      formErrors.push('Please confirm all line items before submitting');
-    }
-    
-    // Validate damaged items have descriptions
-    const damagedItems = deliveryForm.lineItems.filter(item => item.status === 'damaged');
-    const damagedWithoutDescription = damagedItems.filter(item => !item.damageDescription?.trim());
-    if (damagedWithoutDescription.length > 0) {
-      formErrors.push('Please provide damage descriptions for all damaged items');
-    }
-    
-    return formErrors;
-  };
-
-  // Submit delivery confirmation
-  const handleSubmitDelivery = async () => {
-    const formErrors = validateDeliveryForm();
-    if (formErrors.length > 0) {
-      setErrors(formErrors);
-      return;
-    }
-
-    if (!db) {
-      alert('Firebase not configured. This is a demo version.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const result = await processDeliveryConfirmation(deliveryForm, user.uid);
-      
-      // Show success message with details
-      const successMessage = `Delivery confirmation submitted successfully!\n\n` +
-        `Delivery ID: ${result.deliveryId}\n` +
-        `Issues Created: ${result.issuesCreated}\n` +
-        `Inventory Updated: ${result.inventoryUpdated} materials`;
-      
-      alert(successMessage);
-      
-      // Reset form
-      setSelectedPO(null);
-      setLineItemStatuses(new Map());
-      setDeliveryForm({
-        purchaseOrderId: '',
-        deliveryDate: new Date(),
-        receivedBy: user?.displayName || user?.email || '',
-        lineItems: [],
-        notes: ''
-      });
-      setErrors([]);
-      
-      // Refresh PO list
-      fetchPendingPurchaseOrders();
-    } catch (error) {
-      console.error('Error submitting delivery:', error);
-      setErrors(['Failed to submit delivery confirmation. Please try again.']);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchPendingPurchaseOrders();
-    }
-  }, [user]);
-
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="max-w-6xl mx-auto p-6 text-center">
-        <LoadingSpinner className="mx-auto mb-4" />
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    );
-  }
-
-  // Show login prompt if not authenticated
-  if (!user) {
-    return (
-      <div className="max-w-6xl mx-auto p-6 text-center">
-        <h1 className="text-3xl font-bold mb-8 text-gray-800">Delivery Confirmation</h1>
-        <div className="bg-white p-8 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Authentication Required</h2>
-          <p className="text-gray-600 mb-6">
-            Please sign in to access delivery confirmation.
-          </p>
-          <div className="space-x-4">
-            <a
-              href="/auth/login"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Sign In
-            </a>
-            <a
-              href="/auth/signup"
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Sign Up
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Delivery Confirmation</h1>
-        <div className="text-sm text-gray-600">
-          Welcome, {user.displayName || user.email}
-        </div>
-      </div>
-
-      {/* Error Messages */}
-      {errors.length > 0 && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-          <h3 className="text-sm font-medium text-red-800 mb-2">Please fix the following issues:</h3>
-          <ul className="list-disc list-inside text-sm text-red-700">
-            {errors.map((error, index) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!selectedPO ? (
-        /* PO Selection */
-        <div className="bg-white rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold p-6 border-b">Select Purchase Order for Delivery</h2>
-          
-          {loading ? (
-            <div className="p-6 text-center">
-              <LoadingSpinner className="mx-auto mb-4" />
-              <p className="text-gray-600">Loading purchase orders...</p>
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white rounded-lg shadow-lg">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Confirm Delivery
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {shipment.projectName} - {shipment.supplier}
+              </p>
             </div>
-          ) : purchaseOrders.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-gray-500 mb-4">No pending purchase orders found.</p>
-              <a
-                href="/purchase-orders"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Create Purchase Order
-              </a>
-            </div>
-          ) : (
-            <div className="p-6">
-              <div className="grid gap-4">
-                {purchaseOrders.map((po) => (
-                  <div
-                    key={po.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
-                    onClick={() => handlePOSelection(po.id)}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{po.poNumber}</h3>
-                        <p className="text-sm text-gray-600">Supplier: {po.supplierName}</p>
-                        <p className="text-sm text-gray-600">Jobsite: {po.jobsiteName}</p>
-                        <p className="text-sm text-gray-600">Expected: {formatDeliveryDate(po.expectedDeliveryDate)}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          po.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
-                          {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
-                        </span>
-                        <p className="text-sm text-gray-600 mt-1">{po.lineItems.length} items</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            <button
+              onClick={onCancel}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
               </div>
             </div>
           )}
-        </div>
-      ) : (
-        /* Delivery Confirmation Form */
-        <div className="space-y-6">
-          {/* Selected PO Info */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h2 className="text-xl font-semibold">Confirming Delivery for PO: {selectedPO.poNumber}</h2>
-                <p className="text-gray-600">Supplier: {selectedPO.supplierName}</p>
-                <p className="text-gray-600">Jobsite: {selectedPO.jobsiteName}</p>
-                <p className="text-gray-600">Expected: {formatDeliveryDate(selectedPO.expectedDeliveryDate)}</p>
-              </div>
-              <button
-                onClick={() => setSelectedPO(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ← Back to PO Selection
-              </button>
-            </div>
 
-            {/* Delivery Details */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Date *
-                </label>
-                <input
-                  type="date"
-                  value={deliveryForm.deliveryDate.toISOString().split('T')[0]}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, deliveryDate: new Date(e.target.value) })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Received By *
-                </label>
-                <input
-                  type="text"
-                  value={deliveryForm.receivedBy}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, receivedBy: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Your name"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Notes
-                </label>
-                <input
-                  type="text"
-                  value={deliveryForm.notes}
-                  onChange={(e) => setDeliveryForm({ ...deliveryForm, notes: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="General delivery notes..."
-                />
-              </div>
+          {/* On-Site Location */}
+          <div>
+            <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
+              On-Site Location *
+            </label>
+            <input
+              type="text"
+              id="location"
+              value={formData.onSiteLocation}
+              onChange={(e) => setFormData({ ...formData, onSiteLocation: e.target.value })}
+              placeholder="e.g., Building A - Loading Dock, Warehouse Section 3"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              disabled={loading}
+            />
+          </div>
+
+          {/* Materials Received */}
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Materials Received
+            </h3>
+            <div className="space-y-4">
+              {formData.materialsReceived.map((material, index) => {
+                const originalMaterial = shipment.materials.find(m => m.id === material.materialId);
+                return (
+                  <div key={material.materialId} className="bg-gray-50 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      {/* Material Info */}
+                      <div className="md:col-span-1">
+                        <h4 className="font-medium text-gray-900">
+                          {originalMaterial?.name}
+                        </h4>
+                        <p className="text-sm text-gray-600">
+                          Expected: {originalMaterial?.quantity} {originalMaterial?.unit || 'units'}
+                        </p>
+                      </div>
+
+                      {/* Actual Quantity */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Actual Quantity
+                        </label>
+                        <input
+                          type="number"
+                          value={material.actualQuantity}
+                          onChange={(e) => handleMaterialChange(index, 'actualQuantity', parseInt(e.target.value) || 0)}
+                          min="0"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={loading}
+                        />
+                      </div>
+
+                      {/* Condition */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Condition
+                        </label>
+                        <select
+                          value={material.condition}
+                          onChange={(e) => handleMaterialChange(index, 'condition', e.target.value as MaterialCondition)}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={loading}
+                        >
+                          <option value="good">Good Condition</option>
+                          <option value="damaged">Damaged</option>
+                          <option value="missing">Missing</option>
+                          <option value="partial">Partial Delivery</option>
+                        </select>
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Notes
+                        </label>
+                        <input
+                          type="text"
+                          value={material.notes}
+                          onChange={(e) => handleMaterialChange(index, 'notes', e.target.value)}
+                          placeholder="Optional notes"
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Condition Badge */}
+                    <div className="mt-2">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getConditionColor(material.condition)}`}>
+                        {getConditionLabel(material.condition)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Line Items */}
-          <div className="bg-white rounded-lg shadow-md">
-            <h3 className="text-lg font-semibold p-6 border-b">Confirm Line Items</h3>
-            <div className="p-6 space-y-6">
-              {selectedPO.lineItems.map((lineItem) => (
-                <DeliveryLineItem
-                  key={lineItem.id}
-                  lineItem={lineItem}
-                  onStatusChange={handleLineItemStatusChange}
-                  disabled={submitting}
-                />
-              ))}
-            </div>
+          {/* Photo Upload */}
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Delivery Photos *
+            </h3>
+            <PhotoUpload
+              photos={formData.photos}
+              onPhotosChange={(photos) => setFormData({ ...formData, photos })}
+              maxPhotos={10}
+              disabled={loading}
+            />
+            
+            {/* Upload Progress */}
+            {Object.keys(uploadProgress).length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-sm font-medium text-gray-700">Upload Progress</h4>
+                {Object.entries(uploadProgress).map(([fileIndex, progress]) => (
+                  <div key={fileIndex} className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-600 w-16">
+                      Photo {parseInt(fileIndex) + 1}
+                    </span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${progress.progress}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-gray-600 w-12">
+                      {Math.round(progress.progress)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Submit Button */}
-          <div className="flex justify-end space-x-4">
+          {/* General Notes */}
+          <div>
+            <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+              Additional Notes
+            </label>
+            <textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              rows={3}
+              placeholder="Any additional notes about the delivery..."
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
             <button
-              onClick={() => setSelectedPO(null)}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={submitting}
+              type="button"
+              onClick={onCancel}
+              disabled={loading}
+              className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
-              onClick={handleSubmitDelivery}
-              disabled={submitting || deliveryForm.lineItems.length !== selectedPO.lineItems.length}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
-              {submitting && <LoadingSpinner size="sm" className="mr-2" />}
-              {submitting ? 'Submitting...' : 'Confirm Delivery'}
+              {loading && <LoadingSpinner size="sm" />}
+              <span>{loading ? 'Confirming...' : 'Confirm Delivery'}</span>
             </button>
           </div>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }

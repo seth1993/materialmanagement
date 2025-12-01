@@ -2,83 +2,86 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
-  User as FirebaseUser,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
+  User, 
+  signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  sendPasswordResetEmail,
-  updateProfile as firebaseUpdateProfile,
+  onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { User, AuthContextType } from '@/types/auth';
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function useAuth() {
+export const useAuthContext = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuthContext must be used within an AuthProvider');
   }
   return context;
-}
+};
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-        });
-      } else {
-        setUser(null);
-      }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
   };
 
-  const signUp = async (email: string, password: string, displayName?: string) => {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
-    if (displayName && result.user) {
-      await firebaseUpdateProfile(result.user, { displayName });
+  const signUp = async (email: string, password: string) => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error('Sign up error:', error);
+      throw error;
     }
   };
 
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
-    await firebaseSignOut(auth);
-  };
-
-  const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
-  };
-
-  const updateProfile = async (displayName: string) => {
-    if (auth.currentUser) {
-      await firebaseUpdateProfile(auth.currentUser, { displayName });
-      setUser(prev => prev ? { ...prev, displayName } : null);
+    try {
+      await firebaseSignOut(auth);
+    } catch (error) {
+      console.error('Sign out error:', error);
+      throw error;
     }
   };
 
@@ -89,8 +92,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signUp,
     signInWithGoogle,
     signOut,
-    resetPassword,
-    updateProfile,
   };
 
   return (
@@ -98,4 +99,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
       {children}
     </AuthContext.Provider>
   );
-}
+};

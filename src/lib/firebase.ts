@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'demo-api-key',
@@ -18,6 +19,7 @@ const isConfigured = process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
 let app: any = null;
 let db: any = null;
 let auth: any = null;
+let storage: any = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
 if (isConfigured) {
@@ -25,6 +27,7 @@ if (isConfigured) {
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
   auth = getAuth(app);
+  storage = getStorage(app);
   
   // Configure Google Auth Provider
   googleProvider = new GoogleAuthProvider();
@@ -35,5 +38,5 @@ if (isConfigured) {
   console.warn('Firebase not configured. Using mock objects for build.');
 }
 
-export { db, auth, googleProvider };
+export { db, auth, storage, googleProvider };
 export default app;
