@@ -52,6 +52,16 @@ export const Navigation: React.FC = () => {
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Accounting Export
+                  href="/"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Materials
+                </Link>
+                <Link
+                  href="/pos"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Purchase Orders
                 </Link>
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
@@ -70,6 +80,12 @@ export const Navigation: React.FC = () => {
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Profile
+                </Link>
+                <Link
+                  href="/admin"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Admin
                 </Link>
                 <button
                   onClick={handleSignOut}
