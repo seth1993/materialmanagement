@@ -1,9 +1,69 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access on all documents to any user signed in to the application
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Materials (legacy collection)
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Material Groups
+    match /materialGroups/{groupId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.userId == request.auth.uid;
+    }
+    
+    // Materials in groups
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && (
+        // Legacy materials with userId
+        (resource.data.userId != null && request.auth.uid == resource.data.userId) ||
+        // New materials in groups
+        (resource.data.materialGroupId != null && 
+         exists(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)) &&
+         exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)).data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+      );
+    }
+    
+    // Vendors
+    match /vendors/{vendorId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Vendor Quotes
+    match /vendorQuotes/{quoteId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/materials/$(resource.data.materialId)) &&
+        (
+          // Legacy materials
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.userId == request.auth.uid) ||
+          // Materials in groups
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId != null &&
+           exists(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)) &&
+           exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)) &&
+           get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+        );
+    }
+    
+    // Material Vendor Selections
+    match /materialVendorSelections/{selectionId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/materials/$(resource.data.materialId)) &&
+        (
+          // Legacy materials
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.userId == request.auth.uid) ||
+          // Materials in groups
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId != null &&
+           exists(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)) &&
+           exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)) &&
+           get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+        );
     }
   }
 }
