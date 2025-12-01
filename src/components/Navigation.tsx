@@ -61,6 +61,10 @@ export const Navigation: React.FC = () => {
           <div className="flex items-center space-x-2 sm:space-x-4">
             {user ? (
               <>
+                <div className="hidden md:flex items-center space-x-6">
+                  <Link
+                    href="/"
+                    className="text-sm text-gray-600 hover:text-gray-900 font-medium"
                 <nav className="hidden md:flex space-x-4">
                   <Link
                     href="/"
@@ -69,6 +73,18 @@ export const Navigation: React.FC = () => {
                     Materials
                   </Link>
                   <Link
+                    href="/sourcing"
+                    className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                  >
+                    Sourcing
+                  </Link>
+                  <Link
+                    href="/rfq"
+                    className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                  >
+                    RFQs
+                  </Link>
+                </div>
                     href="/projects/demo/material-groups"
                     className="text-sm text-gray-600 hover:text-gray-900"
                   >
