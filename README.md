@@ -80,6 +80,72 @@ npm run dev
 
 6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
+## Local Development
+
+### Development Scripts
+
+```bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Run linting
+npm run lint
+
+# Fix linting issues
+npm run lint:fix
+
+# Run type checking
+npm run type-check
+
+# Run all checks (type-check + lint)
+npm run prepare
+```
+
+### Development with Docker
+
+If you prefer to use Docker for development:
+
+```bash
+# Copy environment file
+cp .env.local.example .env.local
+# Edit .env.local with your Firebase config
+
+# Start development server with Docker
+docker-compose up app-dev
+
+# Access the app at http://localhost:3001
+```
+
+### Environment Management
+
+1. **Local Development**: Use `.env.local` file (never commit this)
+2. **Production**: Set environment variables in your hosting platform
+3. **CI/CD**: Use GitHub repository secrets
+
+#### Environment File Setup
+```bash
+# Copy the example file
+cp .env.local.example .env.local
+
+# Edit with your Firebase configuration
+nano .env.local
+```
+
+### Code Quality
+
+This project includes several tools to maintain code quality:
+
+- **ESLint**: For code linting and style consistency
+- **TypeScript**: For type safety
+- **Pre-commit hooks**: Run type checking and linting before commits
+- **GitHub Actions**: Automated testing and security checks
+
 ## Authentication Flow
 
 ### Available Routes
@@ -139,10 +205,53 @@ service cloud.firestore {
 }
 ```
 
-## Deployment
+## CI/CD Pipeline
 
-### Firebase Hosting
+This project includes a comprehensive CI/CD pipeline using GitHub Actions that automatically:
 
+- **Runs tests and builds** on every push to `main` and `develop` branches
+- **Performs security audits** and vulnerability checks
+- **Deploys to Firebase Hosting** when code is pushed to `main`
+- **Supports manual deployments** to staging and production environments
+
+### GitHub Actions Workflows
+
+#### CI Pipeline (`.github/workflows/ci.yml`)
+- Runs on Node.js 18.x and 20.x
+- Performs linting, type checking, and builds
+- Runs security audits
+- Triggers on pushes and pull requests to `main` and `develop`
+
+#### Deployment Pipeline (`.github/workflows/deploy.yml`)
+- Automatically deploys to production on `main` branch pushes
+- Supports manual deployment to staging environment
+- Deploys both the application and Firestore rules
+
+### Required GitHub Secrets
+
+Set up the following secrets in your GitHub repository settings:
+
+```
+NEXT_PUBLIC_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_FIREBASE_APP_ID
+FIREBASE_SERVICE_ACCOUNT
+FIREBASE_TOKEN
+FIREBASE_PROJECT_ID
+```
+
+## Deployment Options
+
+### 1. Firebase Hosting (Recommended)
+
+#### Automatic Deployment
+- Push to `main` branch triggers automatic deployment
+- Manual deployment available via GitHub Actions
+
+#### Manual Deployment
 1. Install Firebase CLI:
 ```bash
 npm install -g firebase-tools
@@ -153,23 +262,60 @@ npm install -g firebase-tools
 firebase login
 ```
 
-3. Initialize Firebase in your project:
+3. Build and deploy:
 ```bash
-firebase init hosting
+npm run firebase:deploy
 ```
 
-4. Build and deploy:
+#### Staging Deployment
 ```bash
-npm run build
-firebase deploy
+npm run firebase:deploy:staging
 ```
+
+### 2. Docker Deployment
+
+#### Production Build
+```bash
+docker build -t materialmanagement .
+docker run -p 3000:3000 materialmanagement
+```
+
+#### Development with Docker Compose
+```bash
+# Copy environment file
+cp .env.local.example .env.local
+# Edit .env.local with your Firebase config
+
+# Start development environment
+docker-compose up app-dev
+```
+
+#### Production with Docker Compose
+```bash
+docker-compose up app
+```
+
+### 3. Other Platforms
+
+#### Vercel
+1. Connect your GitHub repository to Vercel
+2. Add environment variables in Vercel dashboard
+3. Deploy automatically on push
+
+#### Netlify
+1. Connect your GitHub repository to Netlify
+2. Set build command: `npm run build`
+3. Set publish directory: `out`
+4. Add environment variables in site settings
 
 ### Environment Variables for Production
 
 Make sure to set your environment variables in your hosting platform:
-- Vercel: Add them in the Vercel dashboard
-- Netlify: Add them in site settings
-- Firebase: Use Firebase Functions config
+- **GitHub Actions**: Add as repository secrets
+- **Vercel**: Add them in the Vercel dashboard
+- **Netlify**: Add them in site settings
+- **Docker**: Use `.env` file or environment variables
+- **Firebase**: Use Firebase Functions config
 
 ## Contributing
 
