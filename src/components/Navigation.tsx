@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export const Navigation: React.FC = () => {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, isAdmin, signOut } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -47,18 +47,6 @@ export const Navigation: React.FC = () => {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                <Link
-                  href="/"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Materials
-                </Link>
-                <Link
-                  href="/pos"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Purchase Orders
-                </Link>
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
                     <img
@@ -71,6 +59,14 @@ export const Navigation: React.FC = () => {
                     {user.displayName || user.email}
                   </span>
                 </div>
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Admin
+                  </Link>
+                )}
                 <Link
                   href="/auth/profile"
                   className="text-sm text-gray-600 hover:text-gray-900"
