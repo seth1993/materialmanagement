@@ -47,6 +47,18 @@ export const Navigation: React.FC = () => {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
+                <Link
+                  href="/"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Materials
+                </Link>
+                <Link
+                  href="/pos"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Purchase Orders
+                </Link>
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
                     <img
