@@ -42,6 +42,23 @@ export const Navigation: React.FC = () => {
             <Link href="/" className="text-xl font-bold text-gray-900">
               Material Management
             </Link>
+            
+            {user && (
+              <div className="flex items-center space-x-6">
+                <Link
+                  href="/"
+                  className="text-sm font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Materials
+                </Link>
+                <Link
+                  href="/deliveries"
+                  className="text-sm font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Deliveries
+                </Link>
+              </div>
+            )}
             <nav className="hidden md:flex space-x-6">
               <Link
                 href="/"
