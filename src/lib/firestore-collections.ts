@@ -1,245 +1,320 @@
-// Firestore collection names and configuration
+import { 
+  collection, 
+  doc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  limit,
+  startAfter,
+  DocumentSnapshot,
+  QueryConstraint,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from './firebase';
+import { Requisition, RequisitionStatus, RequisitionPriority } from '@/types/requisition';
+import { User, UserRole } from '@/types/user';
 
+// Collection names
 export const COLLECTIONS = {
-  MATERIALS: 'materials',
+  USERS: 'users',
   REQUISITIONS: 'requisitions',
-  PURCHASE_ORDERS: 'purchaseOrders',
-  VENDORS: 'vendors',
-  MATERIAL_VENDORS: 'materialVendors',
-  PROCUREMENT_CONFIG: 'procurementConfig',
-  AUDIT_LOGS: 'auditLogs'
+  APPROVAL_WORKFLOWS: 'approval_workflows',
+  NOTIFICATIONS: 'notifications',
+  AUDIT_LOGS: 'audit_logs'
 } as const;
 
-// Firestore document converters for proper date handling
-import { 
-  DocumentData, 
-  QueryDocumentSnapshot, 
-  SnapshotOptions,
-  Timestamp 
-} from 'firebase/firestore';
-import { 
-  Requisition, 
-  PurchaseOrder, 
-  Vendor, 
-  ProcurementAuditLog,
-  ProcurementConfig,
-  MaterialVendor
-} from '@/types/procurement';
-
-// Helper function to convert Firestore timestamps to Date objects
-const convertTimestamps = (data: any): any => {
-  if (!data) return data;
-  
-  const converted = { ...data };
-  
-  // Convert common timestamp fields
-  const timestampFields = [
-    'createdAt', 'updatedAt', 'approvedAt', 'rejectedAt', 
-    'sentAt', 'deliveryDate', 'requiredDate', 'urgencyDate',
-    'lastOrderDate', 'timestamp'
-  ];
-  
-  timestampFields.forEach(field => {
-    if (converted[field] && converted[field].toDate) {
-      converted[field] = converted[field].toDate();
-    }
-  });
-  
-  // Convert nested arrays with timestamps (like requisition lines)
-  if (converted.lines && Array.isArray(converted.lines)) {
-    converted.lines = converted.lines.map((line: any) => convertTimestamps(line));
+// Firestore utility functions
+export class FirestoreService {
+  // Generic CRUD operations
+  static async create<T>(collectionName: string, data: Omit<T, 'id'>): Promise<string> {
+    if (!db) throw new Error('Firestore not configured');
+    
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    return docRef.id;
   }
-  
-  return converted;
-};
 
-// Requisition converter
-export const requisitionConverter = {
-  toFirestore(requisition: Requisition): DocumentData {
-    const data = { ...requisition };
+  static async update<T>(collectionName: string, id: string, data: Partial<T>): Promise<void> {
+    if (!db) throw new Error('Firestore not configured');
     
-    // Convert Date objects to Firestore Timestamps
-    if (data.createdAt) data.createdAt = Timestamp.fromDate(data.createdAt);
-    if (data.updatedAt) data.updatedAt = Timestamp.fromDate(data.updatedAt);
-    if (data.approvedAt) data.approvedAt = Timestamp.fromDate(data.approvedAt);
-    if (data.rejectedAt) data.rejectedAt = Timestamp.fromDate(data.rejectedAt);
-    if (data.requiredDate) data.requiredDate = Timestamp.fromDate(data.requiredDate);
+    const docRef = doc(db, collectionName, id);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: new Date()
+    });
+  }
+
+  static async delete(collectionName: string, id: string): Promise<void> {
+    if (!db) throw new Error('Firestore not configured');
     
-    // Convert dates in lines
-    if (data.lines) {
-      data.lines = data.lines.map(line => ({
-        ...line,
-        urgencyDate: line.urgencyDate ? Timestamp.fromDate(line.urgencyDate) : undefined
-      }));
+    const docRef = doc(db, collectionName, id);
+    await deleteDoc(docRef);
+  }
+
+  static async getById<T>(collectionName: string, id: string): Promise<T | null> {
+    if (!db) throw new Error('Firestore not configured');
+    
+    const docRef = doc(db, collectionName, id);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as T;
+    }
+    return null;
+  }
+
+  static async getMany<T>(
+    collectionName: string, 
+    constraints: QueryConstraint[] = [],
+    pageSize?: number,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: T[]; lastDoc?: DocumentSnapshot }> {
+    if (!db) throw new Error('Firestore not configured');
+    
+    let queryConstraints = [...constraints];
+    
+    if (pageSize) {
+      queryConstraints.push(limit(pageSize));
     }
     
-    return data;
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): Requisition {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...convertTimestamps(data)
-    } as Requisition;
+    if (lastDoc) {
+      queryConstraints.push(startAfter(lastDoc));
+    }
+    
+    const q = query(collection(db, collectionName), ...queryConstraints);
+    const querySnapshot = await getDocs(q);
+    
+    const data = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as T[];
+    
+    const newLastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+    
+    return { data, lastDoc: newLastDoc };
   }
-};
+}
 
-// Purchase Order converter
-export const purchaseOrderConverter = {
-  toFirestore(purchaseOrder: PurchaseOrder): DocumentData {
-    const data = { ...purchaseOrder };
-    
-    // Convert Date objects to Firestore Timestamps
-    if (data.createdAt) data.createdAt = Timestamp.fromDate(data.createdAt);
-    if (data.updatedAt) data.updatedAt = Timestamp.fromDate(data.updatedAt);
-    if (data.approvedAt) data.approvedAt = Timestamp.fromDate(data.approvedAt);
-    if (data.sentAt) data.sentAt = Timestamp.fromDate(data.sentAt);
-    if (data.deliveryDate) data.deliveryDate = Timestamp.fromDate(data.deliveryDate);
-    
-    return data;
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): PurchaseOrder {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...convertTimestamps(data)
-    } as PurchaseOrder;
+// Requisition-specific operations
+export class RequisitionService extends FirestoreService {
+  static async createRequisition(requisition: Omit<Requisition, 'id'>): Promise<string> {
+    return this.create<Requisition>(COLLECTIONS.REQUISITIONS, requisition);
   }
-};
 
-// Vendor converter
-export const vendorConverter = {
-  toFirestore(vendor: Vendor): DocumentData {
-    const data = { ...vendor };
-    
-    if (data.createdAt) data.createdAt = Timestamp.fromDate(data.createdAt);
-    if (data.updatedAt) data.updatedAt = Timestamp.fromDate(data.updatedAt);
-    
-    return data;
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): Vendor {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...convertTimestamps(data)
-    } as Vendor;
+  static async updateRequisition(id: string, updates: Partial<Requisition>): Promise<void> {
+    return this.update<Requisition>(COLLECTIONS.REQUISITIONS, id, updates);
   }
-};
 
-// Material Vendor converter
-export const materialVendorConverter = {
-  toFirestore(materialVendor: MaterialVendor): DocumentData {
-    const data = { ...materialVendor };
-    
-    if (data.lastOrderDate) data.lastOrderDate = Timestamp.fromDate(data.lastOrderDate);
-    
-    return data;
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): MaterialVendor {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...convertTimestamps(data)
-    } as MaterialVendor;
+  static async getRequisition(id: string): Promise<Requisition | null> {
+    return this.getById<Requisition>(COLLECTIONS.REQUISITIONS, id);
   }
-};
 
-// Audit Log converter
-export const auditLogConverter = {
-  toFirestore(auditLog: ProcurementAuditLog): DocumentData {
-    const data = { ...auditLog };
-    
-    if (data.timestamp) data.timestamp = Timestamp.fromDate(data.timestamp);
-    
-    return data;
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): ProcurementAuditLog {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...convertTimestamps(data)
-    } as ProcurementAuditLog;
+  static async getRequisitionsByUser(
+    userId: string, 
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: Requisition[]; lastDoc?: DocumentSnapshot }> {
+    return this.getMany<Requisition>(
+      COLLECTIONS.REQUISITIONS,
+      [
+        where('requesterId', '==', userId),
+        orderBy('createdAt', 'desc')
+      ],
+      pageSize,
+      lastDoc
+    );
   }
-};
 
-// Procurement Config converter
-export const procurementConfigConverter = {
-  toFirestore(config: ProcurementConfig): DocumentData {
-    return { ...config };
-  },
-  
-  fromFirestore(
-    snapshot: QueryDocumentSnapshot,
-    options: SnapshotOptions
-  ): ProcurementConfig {
-    const data = snapshot.data(options);
-    return {
-      id: snapshot.id,
-      ...data
-    } as ProcurementConfig;
+  static async getRequisitionsByStatus(
+    status: RequisitionStatus,
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: Requisition[]; lastDoc?: DocumentSnapshot }> {
+    return this.getMany<Requisition>(
+      COLLECTIONS.REQUISITIONS,
+      [
+        where('status', '==', status),
+        orderBy('createdAt', 'desc')
+      ],
+      pageSize,
+      lastDoc
+    );
   }
-};
 
-// Default procurement configuration
-export const DEFAULT_PROCUREMENT_CONFIG: ProcurementConfig = {
-  poNumberFormat: {
-    prefix: 'PO',
-    numberLength: 6,
-    includeYear: true,
-    includeMonth: false,
-    separator: '-',
-    currentCounter: 1
-  },
-  defaultCurrency: 'USD',
-  requireApprovalForPO: true,
-  autoAssignVendors: false,
-  allowPartialConversion: true
-};
+  static async getPendingApprovals(
+    userRole: UserRole,
+    userId: string,
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: Requisition[]; lastDoc?: DocumentSnapshot }> {
+    // This would need more complex logic based on approval workflow
+    // For now, return requisitions that are submitted or under review
+    const statuses = [RequisitionStatus.SUBMITTED, RequisitionStatus.UNDER_REVIEW];
+    
+    return this.getMany<Requisition>(
+      COLLECTIONS.REQUISITIONS,
+      [
+        where('status', 'in', statuses),
+        orderBy('createdAt', 'desc')
+      ],
+      pageSize,
+      lastDoc
+    );
+  }
 
-// Firestore indexes that should be created for optimal performance
-export const RECOMMENDED_INDEXES = [
-  // Requisitions
-  { collection: 'requisitions', fields: ['userId', 'status'] },
-  { collection: 'requisitions', fields: ['status', 'createdAt'] },
-  { collection: 'requisitions', fields: ['requestedBy', 'status'] },
-  { collection: 'requisitions', fields: ['approvedBy', 'approvedAt'] },
-  
-  // Purchase Orders
-  { collection: 'purchaseOrders', fields: ['userId', 'status'] },
-  { collection: 'purchaseOrders', fields: ['vendorId', 'status'] },
-  { collection: 'purchaseOrders', fields: ['createdBy', 'createdAt'] },
-  { collection: 'purchaseOrders', fields: ['status', 'createdAt'] },
-  
-  // Vendors
-  { collection: 'vendors', fields: ['userId', 'isActive'] },
-  { collection: 'vendors', fields: ['name', 'isActive'] },
-  
-  // Material Vendors
-  { collection: 'materialVendors', fields: ['materialId', 'isPreferred'] },
-  { collection: 'materialVendors', fields: ['vendorId', 'isPreferred'] },
-  
-  // Audit Logs
-  { collection: 'auditLogs', fields: ['entityType', 'entityId'] },
-  { collection: 'auditLogs', fields: ['performedBy', 'timestamp'] },
-  { collection: 'auditLogs', fields: ['userId', 'timestamp'] }
-];
+  static async searchRequisitions(
+    searchTerm: string,
+    filters: {
+      status?: RequisitionStatus[];
+      priority?: RequisitionPriority[];
+      department?: string;
+      dateFrom?: Date;
+      dateTo?: Date;
+    } = {},
+    pageSize: number = 20,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: Requisition[]; lastDoc?: DocumentSnapshot }> {
+    const constraints: QueryConstraint[] = [];
+
+    // Add filters
+    if (filters.status && filters.status.length > 0) {
+      constraints.push(where('status', 'in', filters.status));
+    }
+
+    if (filters.priority && filters.priority.length > 0) {
+      constraints.push(where('priority', 'in', filters.priority));
+    }
+
+    if (filters.department) {
+      constraints.push(where('department', '==', filters.department));
+    }
+
+    if (filters.dateFrom) {
+      constraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.dateFrom)));
+    }
+
+    if (filters.dateTo) {
+      constraints.push(where('createdAt', '<=', Timestamp.fromDate(filters.dateTo)));
+    }
+
+    // Note: Firestore doesn't support full-text search natively
+    // For production, you'd want to use Algolia or similar service
+    // For now, we'll just apply filters and order by creation date
+    constraints.push(orderBy('createdAt', 'desc'));
+
+    return this.getMany<Requisition>(
+      COLLECTIONS.REQUISITIONS,
+      constraints,
+      pageSize,
+      lastDoc
+    );
+  }
+}
+
+// User-specific operations
+export class UserService extends FirestoreService {
+  static async createUser(user: Omit<User, 'id'>): Promise<string> {
+    return this.create<User>(COLLECTIONS.USERS, user);
+  }
+
+  static async updateUser(id: string, updates: Partial<User>): Promise<void> {
+    return this.update<User>(COLLECTIONS.USERS, id, updates);
+  }
+
+  static async getUser(id: string): Promise<User | null> {
+    return this.getById<User>(COLLECTIONS.USERS, id);
+  }
+
+  static async getUsersByRole(
+    role: UserRole,
+    pageSize: number = 50
+  ): Promise<{ data: User[]; lastDoc?: DocumentSnapshot }> {
+    return this.getMany<User>(
+      COLLECTIONS.USERS,
+      [
+        where('role', '==', role),
+        orderBy('displayName', 'asc')
+      ],
+      pageSize
+    );
+  }
+
+  static async getApprovers(
+    minApprovalLimit?: number
+  ): Promise<{ data: User[]; lastDoc?: DocumentSnapshot }> {
+    const constraints: QueryConstraint[] = [
+      where('role', 'in', [UserRole.APPROVER, UserRole.PROJECT_MANAGER, UserRole.ADMIN]),
+      orderBy('approvalLimit', 'desc')
+    ];
+
+    if (minApprovalLimit) {
+      constraints.push(where('approvalLimit', '>=', minApprovalLimit));
+    }
+
+    return this.getMany<User>(COLLECTIONS.USERS, constraints);
+  }
+}
+
+// Audit logging
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  details: Record<string, any>;
+  timestamp: Date;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export class AuditService extends FirestoreService {
+  static async logAction(
+    userId: string,
+    userName: string,
+    action: string,
+    resourceType: string,
+    resourceId: string,
+    details: Record<string, any> = {}
+  ): Promise<void> {
+    const auditLog: Omit<AuditLog, 'id'> = {
+      userId,
+      userName,
+      action,
+      resourceType,
+      resourceId,
+      details,
+      timestamp: new Date()
+    };
+
+    await this.create<AuditLog>(COLLECTIONS.AUDIT_LOGS, auditLog);
+  }
+
+  static async getAuditLogs(
+    resourceType?: string,
+    resourceId?: string,
+    pageSize: number = 50,
+    lastDoc?: DocumentSnapshot
+  ): Promise<{ data: AuditLog[]; lastDoc?: DocumentSnapshot }> {
+    const constraints: QueryConstraint[] = [orderBy('timestamp', 'desc')];
+
+    if (resourceType) {
+      constraints.unshift(where('resourceType', '==', resourceType));
+    }
+
+    if (resourceId) {
+      constraints.unshift(where('resourceId', '==', resourceId));
+    }
+
+    return this.getMany<AuditLog>(COLLECTIONS.AUDIT_LOGS, constraints, pageSize, lastDoc);
+  }
+}
