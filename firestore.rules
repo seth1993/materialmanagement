@@ -1,6 +1,134 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Legacy materials - users can only access their own materials
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && (
+        // Legacy materials (direct user ownership)
+        request.auth.uid == resource.data.userId ||
+        // Project-based materials (project ownership)
+        (resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.userId == request.auth.uid)
+      );
+      allow create: if request.auth != null && (
+        // Legacy materials (direct user ownership)
+        request.auth.uid == request.resource.data.userId ||
+        // Project-based materials (project ownership)
+        (request.resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.userId == request.auth.uid)
+      );
+    }
+    
+    // Projects - users can only access their own projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Material Groups - users can only access groups in their projects
+    // Materials (legacy collection)
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Material Groups
+    match /materialGroups/{groupId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.userId == request.auth.uid;
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.userId == request.auth.uid;
+    }
+    
+    // Materials in groups
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && (
+        // Legacy materials with userId
+        (resource.data.userId != null && request.auth.uid == resource.data.userId) ||
+        // New materials in groups
+        (resource.data.materialGroupId != null && 
+         exists(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)) &&
+         exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)).data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(resource.data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+      );
+    }
+    
+    // Vendors
+    match /vendors/{vendorId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Vendor Quotes
+    match /vendorQuotes/{quoteId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/materials/$(resource.data.materialId)) &&
+        (
+          // Legacy materials
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.userId == request.auth.uid) ||
+          // Materials in groups
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId != null &&
+           exists(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)) &&
+           exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)) &&
+           get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+        );
+    }
+    
+    // Material Vendor Selections
+    match /materialVendorSelections/{selectionId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/materials/$(resource.data.materialId)) &&
+        (
+          // Legacy materials
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.userId == request.auth.uid) ||
+          // Materials in groups
+          (get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId != null &&
+           exists(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)) &&
+           exists(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)) &&
+           get(/databases/$(database)/documents/projects/$(get(/databases/$(database)/documents/materialGroups/$(get(/databases/$(database)/documents/materials/$(resource.data.materialId)).data.materialGroupId)).data.projectId)).data.userId == request.auth.uid)
+        );
+    // Materials collection - users can only access their own materials
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Vendors collection - users can only access their own vendors
+    match /vendors/{vendorId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Projects collection - users can only access their own projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Cost codes collection - users can only access their own cost codes
+    match /costCodes/{costCodeId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Purchase orders collection - users can only access their own purchase orders
+    match /purchaseOrders/{purchaseOrderId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Receipts collection - users can only access their own receipts
+    match /receipts/{receiptId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
     
     // Helper functions
     function isAuthenticated() {
@@ -11,91 +139,22 @@ service cloud.firestore {
       return request.auth.uid;
     }
     
-    function isOrgMember(organizationId) {
-      return exists(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId)) &&
-             get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId)).data.isActive == true;
+    // User profiles collection - users can read/write their own profile
+    match /userProfiles/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    function hasOrgRole(organizationId, role) {
-      let memberDoc = get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId));
-      return memberDoc.data.role == role;
+    // Audit logs collection - read-only for admin users, no write access (only server-side)
+    match /auditLogs/{auditLogId} {
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.isAdmin == true;
+      allow write: if false; // Only server-side writes allowed
     }
     
-    function hasMinimumRole(organizationId, minimumRole) {
-      let memberDoc = get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId));
-      let userRole = memberDoc.data.role;
-      
-      return (minimumRole == 'viewer' && userRole in ['viewer', 'member', 'admin', 'owner']) ||
-             (minimumRole == 'member' && userRole in ['member', 'admin', 'owner']) ||
-             (minimumRole == 'admin' && userRole in ['admin', 'owner']) ||
-             (minimumRole == 'owner' && userRole == 'owner');
-    }
-
-    // Organizations collection
-    match /organizations/{organizationId} {
-      allow read: if isAuthenticated() && isOrgMember(organizationId);
-      allow create: if isAuthenticated() && resource.data.ownerId == getUserId();
-      allow update: if isAuthenticated() && hasMinimumRole(organizationId, 'admin');
-      allow delete: if isAuthenticated() && hasOrgRole(organizationId, 'owner');
-    }
-
-    // Organization members collection
-    match /organization_members/{memberId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.userId == getUserId() || 
-                      isOrgMember(resource.data.organizationId));
-      allow create: if isAuthenticated() && 
-                       (resource.data.userId == getUserId() || 
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow update: if isAuthenticated() && 
-                       (resource.data.userId == getUserId() || 
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow delete: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin');
-    }
-
-    // Materials collection - organization scoped
-    match /materials/{materialId} {
-      allow read: if isAuthenticated() && 
-                     isOrgMember(resource.data.organizationId);
-      allow create: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       hasMinimumRole(resource.data.organizationId, 'member') &&
-                       resource.data.organizationId is string &&
-                       resource.data.createdBy == getUserId();
-      allow update: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       hasMinimumRole(resource.data.organizationId, 'member') &&
-                       resource.data.organizationId == request.resource.data.organizationId;
-      allow delete: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       (hasMinimumRole(resource.data.organizationId, 'admin') || 
-                        resource.data.createdBy == getUserId());
-    }
-
-    // Organization invites collection
-    match /organization_invites/{inviteId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.email == request.auth.token.email ||
-                      hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow create: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin') &&
-                       resource.data.invitedBy == getUserId();
-      allow update: if isAuthenticated() && 
-                       (resource.data.email == request.auth.token.email ||
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow delete: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin');
-    }
-
-    // User profiles (optional - for storing additional user data)
-    match /users/{userId} {
-      allow read, write: if isAuthenticated() && userId == getUserId();
-    }
-
-    // Deny all other access
+    // Default rule for other collections
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if request.auth != null;
     }
   }
 }
