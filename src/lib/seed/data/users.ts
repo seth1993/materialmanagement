@@ -1,0 +1,130 @@
+import { User, UserRole } from '@/types/domain';
+
+export const sampleUsers: Array<Omit<User, 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id: string }> = [
+  {
+    id: 'admin-user-1',
+    email: 'admin@acmeconstruction.com',
+    displayName: 'John Admin',
+    firstName: 'John',
+    lastName: 'Admin',
+    role: UserRole.ADMIN,
+    organizationId: 'acme-construction',
+    isActive: true,
+    department: 'Administration',
+    jobTitle: 'System Administrator'
+  },
+  {
+    id: 'manager-user-1',
+    email: 'sarah.manager@acmeconstruction.com',
+    displayName: 'Sarah Manager',
+    firstName: 'Sarah',
+    lastName: 'Manager',
+    role: UserRole.MANAGER,
+    organizationId: 'acme-construction',
+    isActive: true,
+    department: 'Operations',
+    jobTitle: 'Operations Manager',
+    phoneNumber: '+1-555-0124'
+  },
+  {
+    id: 'user-1',
+    email: 'mike.worker@acmeconstruction.com',
+    displayName: 'Mike Worker',
+    firstName: 'Mike',
+    lastName: 'Worker',
+    role: UserRole.USER,
+    organizationId: 'acme-construction',
+    isActive: true,
+    department: 'Construction',
+    jobTitle: 'Site Supervisor',
+    phoneNumber: '+1-555-0125'
+  },
+  {
+    id: 'user-2',
+    email: 'lisa.procurement@acmeconstruction.com',
+    displayName: 'Lisa Procurement',
+    firstName: 'Lisa',
+    lastName: 'Procurement',
+    role: UserRole.USER,
+    organizationId: 'acme-construction',
+    isActive: true,
+    department: 'Procurement',
+    jobTitle: 'Procurement Specialist',
+    phoneNumber: '+1-555-0126'
+  },
+  {
+    id: 'tech-admin-1',
+    email: 'admin@techsolutions.com',
+    displayName: 'David Tech',
+    firstName: 'David',
+    lastName: 'Tech',
+    role: UserRole.ADMIN,
+    organizationId: 'tech-solutions',
+    isActive: true,
+    department: 'IT',
+    jobTitle: 'IT Director'
+  },
+  {
+    id: 'tech-user-1',
+    email: 'jane.developer@techsolutions.com',
+    displayName: 'Jane Developer',
+    firstName: 'Jane',
+    lastName: 'Developer',
+    role: UserRole.USER,
+    organizationId: 'tech-solutions',
+    isActive: true,
+    department: 'Engineering',
+    jobTitle: 'Senior Developer',
+    phoneNumber: '+1-555-0457'
+  },
+  {
+    id: 'mfg-admin-1',
+    email: 'admin@globalmanufacturing.com',
+    displayName: 'Robert Manufacturing',
+    firstName: 'Robert',
+    lastName: 'Manufacturing',
+    role: UserRole.ADMIN,
+    organizationId: 'manufacturing-corp',
+    isActive: true,
+    department: 'Administration',
+    jobTitle: 'Plant Manager'
+  },
+  {
+    id: 'mfg-manager-1',
+    email: 'susan.operations@globalmanufacturing.com',
+    displayName: 'Susan Operations',
+    firstName: 'Susan',
+    lastName: 'Operations',
+    role: UserRole.MANAGER,
+    organizationId: 'manufacturing-corp',
+    isActive: true,
+    department: 'Operations',
+    jobTitle: 'Operations Manager',
+    phoneNumber: '+1-555-0790'
+  },
+  {
+    id: 'mfg-user-1',
+    email: 'tom.inventory@globalmanufacturing.com',
+    displayName: 'Tom Inventory',
+    firstName: 'Tom',
+    lastName: 'Inventory',
+    role: UserRole.USER,
+    organizationId: 'manufacturing-corp',
+    isActive: true,
+    department: 'Warehouse',
+    jobTitle: 'Inventory Specialist',
+    phoneNumber: '+1-555-0791'
+  },
+  {
+    id: 'viewer-user-1',
+    email: 'guest@acmeconstruction.com',
+    displayName: 'Guest Viewer',
+    firstName: 'Guest',
+    lastName: 'Viewer',
+    role: UserRole.VIEWER,
+    organizationId: 'acme-construction',
+    isActive: true,
+    department: 'External',
+    jobTitle: 'External Consultant'
+  }
+];
