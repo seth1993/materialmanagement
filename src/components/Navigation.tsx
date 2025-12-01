@@ -64,6 +64,27 @@ export const Navigation: React.FC = () => {
                 </div>
 
                 <div className="flex items-center space-x-2 sm:space-x-3">
+                <Link
+                  href="/analytics/materials"
+                  className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                >
+                  Analytics
+                  href="/accounting/export"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Accounting Export
+                  href="/"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Materials
+                </Link>
+                <Link
+                  href="/pos"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Purchase Orders
+                </Link>
+                <div className="flex items-center space-x-3">
                   {user.photoURL && (
                     <img
                       src={user.photoURL}
@@ -104,6 +125,24 @@ export const Navigation: React.FC = () => {
                     Sign Out
                   </button>
                 </div>
+                <Link
+                  href="/auth/profile"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Profile
+                </Link>
+                <Link
+                  href="/admin"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Admin
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Sign Out
+                </button>
               </>
             ) : (
               <div className="flex items-center space-x-2 sm:space-x-4">
