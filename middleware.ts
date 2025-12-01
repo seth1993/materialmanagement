@@ -1,76 +1,54 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyAuthToken } from '@/lib/auth-middleware';
+import { getOrCreateCorrelationId, getOrCreateRequestId, CORRELATION_ID_HEADER, REQUEST_ID_HEADER } from './src/lib/correlation';
+import { logger } from './src/lib/logger';
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Skip authentication for public routes
-  const publicRoutes = [
-    '/auth/login',
-    '/auth/signup',
-    '/auth/forgot-password',
-    '/_next',
-    '/favicon.ico',
-    '/api/auth/verify' // Allow this for token verification
-  ];
-
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
-  if (isPublicRoute) {
-    return NextResponse.next();
-  }
-
-  // Skip authentication for static files and Next.js internals
-  if (
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/static/') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
-
-  // For API routes, verify authentication
-  if (pathname.startsWith('/api/')) {
-    const authResult = await verifyAuthToken(request);
-    
-    if (!authResult.success) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Authentication required',
-            statusCode: 401
-          }
-        }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-    }
-
-    // Add user info to headers for API routes
-    const response = NextResponse.next();
-    response.headers.set('x-user-id', authResult.user!.uid);
-    response.headers.set('x-user-email', authResult.user!.email);
-    return response;
-  }
-
-  // For protected pages, redirect to login if not authenticated
-  const authHeader = request.headers.get('authorization');
-  const hasAuthCookie = request.cookies.has('firebase-auth-token');
+export function middleware(request: NextRequest) {
+  const startTime = Date.now();
   
-  // If no auth token present, redirect to login
-  if (!authHeader && !hasAuthCookie) {
-    const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
-  }
+  // Generate or extract correlation and request IDs
+  const correlationId = getOrCreateCorrelationId(request.headers);
+  const requestId = getOrCreateRequestId(request.headers);
+  
+  // Extract user information from headers or cookies if available
+  const userAgent = request.headers.get('user-agent') || undefined;
+  const ip = request.ip || request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+  
+  // Create request context for logging
+  const requestContext = {
+    correlationId,
+    requestId,
+    startTime,
+    method: request.method,
+    url: request.url,
+    userAgent,
+    ip,
+    headers: Object.fromEntries(request.headers.entries()),
+  };
 
-  return NextResponse.next();
+  // Log the incoming request
+  logger.logRequest(requestContext);
+
+  // Create response with tracking headers
+  const response = NextResponse.next();
+  
+  // Add correlation and request IDs to response headers
+  response.headers.set(CORRELATION_ID_HEADER, correlationId);
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  
+  // Add request context to the request for use in API routes
+  // Note: We'll store this in headers since Next.js doesn't allow custom properties on request
+  response.headers.set('x-request-context', JSON.stringify({
+    correlationId,
+    requestId,
+    startTime,
+    method: request.method,
+    url: request.url,
+    userAgent,
+    ip,
+  }));
+
+  return response;
 }
 
 export const config = {
