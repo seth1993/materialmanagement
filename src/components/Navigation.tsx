@@ -77,6 +77,12 @@ export const Navigation: React.FC = () => {
                 >
                   Profile
                 </Link>
+                <Link
+                  href="/admin"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Admin
+                </Link>
                 <button
                   onClick={handleSignOut}
                   className="text-sm text-gray-600 hover:text-gray-900"
