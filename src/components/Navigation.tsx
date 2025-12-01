@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export const Navigation: React.FC = () => {
   const { user, loading, signOut } = useAuth();
@@ -38,15 +39,12 @@ export const Navigation: React.FC = () => {
     <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-8">
             <Link href="/" className="text-xl font-bold text-gray-900">
               Material Management
             </Link>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            {user ? (
-              <>
+            {user && (
+              <nav className="flex space-x-6">
                 <Link
                   href="/"
                   className="text-sm text-gray-600 hover:text-gray-900"
@@ -54,11 +52,25 @@ export const Navigation: React.FC = () => {
                   Materials
                 </Link>
                 <Link
-                  href="/pos"
+                  href="/requisitions"
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
-                  Purchase Orders
+                  Requisitions
                 </Link>
+                <Link
+                  href="/shipments"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Shipments
+                </Link>
+              </nav>
+            )}
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {user ? (
+              <>
+                <NotificationBell />
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
                     <img
@@ -76,12 +88,6 @@ export const Navigation: React.FC = () => {
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Profile
-                </Link>
-                <Link
-                  href="/admin"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Admin
                 </Link>
                 <button
                   onClick={handleSignOut}

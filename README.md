@@ -1,6 +1,6 @@
 # Material Management System
 
-A modern material management application built with Next.js, Firebase Authentication, and Firestore. Features include user authentication with Google Sign-In, email/password authentication, password reset functionality, and user-specific material inventory management.
+A comprehensive material management application built with Next.js, Firebase Authentication, and Firestore. Features include user authentication, material inventory management, requisition workflow, shipment tracking, and a real-time notification system.
 
 ## Features
 
@@ -16,6 +16,27 @@ A modern material management application built with Next.js, Firebase Authentica
   - User-specific inventory
   - Real-time data with Firestore
   - Responsive design
+
+- 📋 **Requisition Management**
+  - Create and submit requisitions
+  - Approval workflow
+  - Priority levels and status tracking
+  - Multi-item requisitions with detailed specifications
+
+- 🚚 **Shipment Tracking**
+  - Create and track shipments
+  - Issue reporting system
+  - Status updates and delivery tracking
+  - Carrier and route management
+
+- 🔔 **Real-time Notification System**
+  - In-app notification bell with unread count
+  - Event-driven notifications for:
+    - Requisition submitted
+    - Requisition approved/rejected
+    - Shipment issues created
+  - Mark as read functionality
+  - Real-time updates with Firestore listeners
 
 - 🎨 **Modern UI/UX**
   - Clean, responsive design with Tailwind CSS
@@ -80,77 +101,13 @@ npm run dev
 
 6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Local Development
-
-### Development Scripts
-
-```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Run linting
-npm run lint
-
-# Fix linting issues
-npm run lint:fix
-
-# Run type checking
-npm run type-check
-
-# Run all checks (type-check + lint)
-npm run prepare
-```
-
-### Development with Docker
-
-If you prefer to use Docker for development:
-
-```bash
-# Copy environment file
-cp .env.local.example .env.local
-# Edit .env.local with your Firebase config
-
-# Start development server with Docker
-docker-compose up app-dev
-
-# Access the app at http://localhost:3001
-```
-
-### Environment Management
-
-1. **Local Development**: Use `.env.local` file (never commit this)
-2. **Production**: Set environment variables in your hosting platform
-3. **CI/CD**: Use GitHub repository secrets
-
-#### Environment File Setup
-```bash
-# Copy the example file
-cp .env.local.example .env.local
-
-# Edit with your Firebase configuration
-nano .env.local
-```
-
-### Code Quality
-
-This project includes several tools to maintain code quality:
-
-- **ESLint**: For code linting and style consistency
-- **TypeScript**: For type safety
-- **Pre-commit hooks**: Run type checking and linting before commits
-- **GitHub Actions**: Automated testing and security checks
-
 ## Authentication Flow
 
 ### Available Routes
 
-- `/` - Home page (requires authentication)
+- `/` - Home page with material management (requires authentication)
+- `/requisitions` - Requisition management page (requires authentication)
+- `/shipments` - Shipment tracking page (requires authentication)
 - `/auth/login` - Sign in page
 - `/auth/signup` - Sign up page
 - `/auth/reset-password` - Password reset page
@@ -170,22 +127,34 @@ This project includes several tools to maintain code quality:
 src/
 ├── app/                    # Next.js app router pages
 │   ├── auth/              # Authentication pages
+│   ├── requisitions/      # Requisition management pages
+│   ├── shipments/         # Shipment tracking pages
 │   ├── layout.tsx         # Root layout with AuthProvider
-│   └── page.tsx           # Home page
+│   └── page.tsx           # Home page with materials
 ├── components/            # React components
 │   ├── auth/             # Authentication components
+│   ├── notifications/    # Notification system components
+│   ├── requisitions/     # Requisition management components
+│   ├── shipments/        # Shipment tracking components
 │   ├── ui/               # UI components
 │   ├── MaterialList.tsx  # Main material management component
-│   └── Navigation.tsx    # Navigation bar
+│   └── Navigation.tsx    # Navigation bar with notification bell
 ├── contexts/             # React contexts
 │   └── AuthContext.tsx   # Authentication context
 ├── hooks/                # Custom React hooks
-│   └── useAuth.ts        # Authentication hooks
+│   ├── useAuth.ts        # Authentication hooks
+│   └── useNotifications.ts # Notification hooks
 ├── lib/                  # Utility libraries
 │   ├── firebase.ts       # Firebase configuration
-│   └── auth-utils.ts     # Authentication utilities
+│   ├── auth-utils.ts     # Authentication utilities
+│   ├── notification-service.ts # Notification management
+│   ├── requisition-service.ts  # Requisition management
+│   └── shipment-service.ts     # Shipment management
 └── types/                # TypeScript type definitions
-    └── auth.ts           # Authentication types
+    ├── auth.ts           # Authentication types
+    ├── notification.ts   # Notification types
+    ├── requisition.ts    # Requisition types
+    └── shipment.ts       # Shipment types
 ```
 
 ## Firebase Security Rules
@@ -205,53 +174,10 @@ service cloud.firestore {
 }
 ```
 
-## CI/CD Pipeline
+## Deployment
 
-This project includes a comprehensive CI/CD pipeline using GitHub Actions that automatically:
+### Firebase Hosting
 
-- **Runs tests and builds** on every push to `main` and `develop` branches
-- **Performs security audits** and vulnerability checks
-- **Deploys to Firebase Hosting** when code is pushed to `main`
-- **Supports manual deployments** to staging and production environments
-
-### GitHub Actions Workflows
-
-#### CI Pipeline (`.github/workflows/ci.yml`)
-- Runs on Node.js 18.x and 20.x
-- Performs linting, type checking, and builds
-- Runs security audits
-- Triggers on pushes and pull requests to `main` and `develop`
-
-#### Deployment Pipeline (`.github/workflows/deploy.yml`)
-- Automatically deploys to production on `main` branch pushes
-- Supports manual deployment to staging environment
-- Deploys both the application and Firestore rules
-
-### Required GitHub Secrets
-
-Set up the following secrets in your GitHub repository settings:
-
-```
-NEXT_PUBLIC_FIREBASE_API_KEY
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-NEXT_PUBLIC_FIREBASE_PROJECT_ID
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-NEXT_PUBLIC_FIREBASE_APP_ID
-FIREBASE_SERVICE_ACCOUNT
-FIREBASE_TOKEN
-FIREBASE_PROJECT_ID
-```
-
-## Deployment Options
-
-### 1. Firebase Hosting (Recommended)
-
-#### Automatic Deployment
-- Push to `main` branch triggers automatic deployment
-- Manual deployment available via GitHub Actions
-
-#### Manual Deployment
 1. Install Firebase CLI:
 ```bash
 npm install -g firebase-tools
@@ -262,60 +188,66 @@ npm install -g firebase-tools
 firebase login
 ```
 
-3. Build and deploy:
+3. Initialize Firebase in your project:
 ```bash
-npm run firebase:deploy
+firebase init hosting
 ```
 
-#### Staging Deployment
+4. Build and deploy:
 ```bash
-npm run firebase:deploy:staging
+npm run build
+firebase deploy
 ```
-
-### 2. Docker Deployment
-
-#### Production Build
-```bash
-docker build -t materialmanagement .
-docker run -p 3000:3000 materialmanagement
-```
-
-#### Development with Docker Compose
-```bash
-# Copy environment file
-cp .env.local.example .env.local
-# Edit .env.local with your Firebase config
-
-# Start development environment
-docker-compose up app-dev
-```
-
-#### Production with Docker Compose
-```bash
-docker-compose up app
-```
-
-### 3. Other Platforms
-
-#### Vercel
-1. Connect your GitHub repository to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy automatically on push
-
-#### Netlify
-1. Connect your GitHub repository to Netlify
-2. Set build command: `npm run build`
-3. Set publish directory: `out`
-4. Add environment variables in site settings
 
 ### Environment Variables for Production
 
 Make sure to set your environment variables in your hosting platform:
-- **GitHub Actions**: Add as repository secrets
-- **Vercel**: Add them in the Vercel dashboard
-- **Netlify**: Add them in site settings
-- **Docker**: Use `.env` file or environment variables
-- **Firebase**: Use Firebase Functions config
+- Vercel: Add them in the Vercel dashboard
+- Netlify: Add them in site settings
+- Firebase: Use Firebase Functions config
+
+## Notification System
+
+The application includes a comprehensive real-time notification system that keeps users informed about important events:
+
+### Features
+
+- **Real-time Updates**: Notifications appear instantly using Firestore real-time listeners
+- **Notification Bell**: Visual indicator in the navigation bar with unread count badge
+- **Dropdown Interface**: Clean, organized list of notifications with priority indicators
+- **Mark as Read**: Individual and bulk mark-as-read functionality
+- **Event-driven**: Automatically triggered by business events
+
+### Notification Types
+
+1. **Requisition Submitted** - When a user submits a requisition for review
+2. **Requisition Approved** - When a requisition is approved by a manager
+3. **Requisition Rejected** - When a requisition is rejected
+4. **Shipment Issue Created** - When an issue is reported for a shipment
+5. **Shipment Delivered** - When a shipment is marked as delivered
+6. **Material Low Stock** - When material inventory falls below threshold
+
+### How It Works
+
+1. **Event Triggers**: Business actions (submit requisition, report issue, etc.) trigger notification creation
+2. **Service Layer**: `NotificationService` handles all CRUD operations and real-time subscriptions
+3. **Real-time Updates**: Firestore listeners provide instant updates to the UI
+4. **User Interface**: `NotificationBell` component displays count and dropdown with notifications
+5. **Data Security**: Firestore rules ensure users only see their own notifications
+
+### Usage Example
+
+```typescript
+// Create a notification when a requisition is submitted
+await NotificationService.createRequisitionSubmittedNotification(
+  userId,
+  requisitionId,
+  requisitionTitle
+);
+
+// Subscribe to real-time notifications in a component
+const { notifications, stats, markAsRead } = useNotifications();
+```
 
 ## Contributing
 

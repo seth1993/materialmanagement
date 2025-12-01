@@ -1,101 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function getUserId() {
-      return request.auth.uid;
-    }
-    
-    function isOrgMember(organizationId) {
-      return exists(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId)) &&
-             get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId)).data.isActive == true;
-    }
-    
-    function hasOrgRole(organizationId, role) {
-      let memberDoc = get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId));
-      return memberDoc.data.role == role;
-    }
-    
-    function hasMinimumRole(organizationId, minimumRole) {
-      let memberDoc = get(/databases/$(database)/documents/organization_members/$(getUserId() + '_' + organizationId));
-      let userRole = memberDoc.data.role;
-      
-      return (minimumRole == 'viewer' && userRole in ['viewer', 'member', 'admin', 'owner']) ||
-             (minimumRole == 'member' && userRole in ['member', 'admin', 'owner']) ||
-             (minimumRole == 'admin' && userRole in ['admin', 'owner']) ||
-             (minimumRole == 'owner' && userRole == 'owner');
-    }
-
-    // Organizations collection
-    match /organizations/{organizationId} {
-      allow read: if isAuthenticated() && isOrgMember(organizationId);
-      allow create: if isAuthenticated() && resource.data.ownerId == getUserId();
-      allow update: if isAuthenticated() && hasMinimumRole(organizationId, 'admin');
-      allow delete: if isAuthenticated() && hasOrgRole(organizationId, 'owner');
-    }
-
-    // Organization members collection
-    match /organization_members/{memberId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.userId == getUserId() || 
-                      isOrgMember(resource.data.organizationId));
-      allow create: if isAuthenticated() && 
-                       (resource.data.userId == getUserId() || 
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow update: if isAuthenticated() && 
-                       (resource.data.userId == getUserId() || 
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow delete: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin');
-    }
-
-    // Materials collection - organization scoped
+    // Materials collection - users can only access their own materials
     match /materials/{materialId} {
-      allow read: if isAuthenticated() && 
-                     isOrgMember(resource.data.organizationId);
-      allow create: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       hasMinimumRole(resource.data.organizationId, 'member') &&
-                       resource.data.organizationId is string &&
-                       resource.data.createdBy == getUserId();
-      allow update: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       hasMinimumRole(resource.data.organizationId, 'member') &&
-                       resource.data.organizationId == request.resource.data.organizationId;
-      allow delete: if isAuthenticated() && 
-                       isOrgMember(resource.data.organizationId) &&
-                       (hasMinimumRole(resource.data.organizationId, 'admin') || 
-                        resource.data.createdBy == getUserId());
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
-
-    // Organization invites collection
-    match /organization_invites/{inviteId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.email == request.auth.token.email ||
-                      hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow create: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin') &&
-                       resource.data.invitedBy == getUserId();
-      allow update: if isAuthenticated() && 
-                       (resource.data.email == request.auth.token.email ||
-                        hasMinimumRole(resource.data.organizationId, 'admin'));
-      allow delete: if isAuthenticated() && 
-                       hasMinimumRole(resource.data.organizationId, 'admin');
+    
+    // Notifications collection - users can only access their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
     }
-
-    // User profiles (optional - for storing additional user data)
-    match /users/{userId} {
-      allow read, write: if isAuthenticated() && userId == getUserId();
+    
+    // Requisitions collection - users can access their own requisitions and read others for approval
+    match /requisitions/{requisitionId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null; // Allow updates for approval workflow
     }
-
-    // Deny all other access
-    match /{document=**} {
-      allow read, write: if false;
+    
+    // Shipments collection - users can access their own shipments and read others for management
+    match /shipments/{shipmentId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null; // Allow updates for status changes and issue reporting
     }
   }
 }
