@@ -55,5 +55,3 @@ export function useAuth() {
     signOut,
   };
 }
-
-
