@@ -26,6 +26,8 @@
     "next": "16.0.6",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "xlsx": "^0.18.5",
+    "papaparse": "^5.4.1"
     "recharts": "^3.5.1",
     "tailwind-merge": "^3.4.0"
   },
@@ -34,6 +36,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/papaparse": "^5.3.14",
     "audit-ci": "^7.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.0.6",
