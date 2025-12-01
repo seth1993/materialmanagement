@@ -7,24 +7,52 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No tests specified yet\" && exit 0",
     "export": "next build",
-    "firebase:deploy": "npm run export && firebase deploy"
+    "firebase:deploy": "npm run export && firebase deploy",
+    "firebase:deploy:staging": "npm run export && firebase hosting:channel:deploy staging",
+    "prepare": "npm run type-check && npm run lint"
   },
   "dependencies": {
     "babel-plugin-react-compiler": "^1.0.0",
+    "clsx": "^2.1.1",
     "firebase": "^12.6.0",
+    "firebase-admin": "^12.6.0",
     "next": "16.0.6",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "audit-ci": "^7.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.0.6",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.10",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "git add"
+    ],
+    "*.{json,md}": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "pre-push": "npm run type-check"
+    }
   }
 }
