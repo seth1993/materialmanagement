@@ -5,6 +5,7 @@ import { collection, addDoc, getDocs, deleteDoc, doc, query, where } from 'fireb
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { logMaterialCreate, logMaterialDelete } from '@/lib/audit';
 
 interface Material {
   id: string;
@@ -58,11 +59,23 @@ export default function MaterialList() {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'materials'), {
+      const materialData = {
         ...newMaterial,
         userId: user.uid,
         createdAt: new Date(),
-      });
+      };
+
+      const docRef = await addDoc(collection(db, 'materials'), materialData);
+      
+      // Log the material creation for audit trail
+      await logMaterialCreate(
+        user.uid,
+        user.email || '',
+        user.displayName || undefined,
+        docRef.id,
+        { ...materialData, id: docRef.id }
+      );
+
       setNewMaterial({ name: '', quantity: 0, category: '' });
       fetchMaterials();
     } catch (error) {
@@ -74,13 +87,28 @@ export default function MaterialList() {
 
   // Delete material from Firestore
   const deleteMaterial = async (id: string) => {
-    if (!db) {
-      alert('Firebase not configured. This is a demo version.');
+    if (!db || !user) {
+      alert('Firebase not configured or user not authenticated.');
       return;
     }
 
     try {
+      // Find the material to get its data for audit logging
+      const materialToDelete = materials.find(m => m.id === id);
+      
       await deleteDoc(doc(db, 'materials', id));
+      
+      // Log the material deletion for audit trail
+      if (materialToDelete) {
+        await logMaterialDelete(
+          user.uid,
+          user.email || '',
+          user.displayName || undefined,
+          id,
+          materialToDelete
+        );
+      }
+      
       fetchMaterials();
     } catch (error) {
       console.error('Error deleting material:', error);
