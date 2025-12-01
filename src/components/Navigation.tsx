@@ -38,27 +38,32 @@ export const Navigation: React.FC = () => {
     <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
+          <div className="flex items-center space-x-8">
             <Link href="/" className="text-xl font-bold text-gray-900">
               Material Management
             </Link>
+            
+            {user && (
+              <div className="flex items-center space-x-6">
+                <Link
+                  href="/"
+                  className="text-sm font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Materials
+                </Link>
+                <Link
+                  href="/vendors"
+                  className="text-sm font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Vendors
+                </Link>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                <Link
-                  href="/"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Materials
-                </Link>
-                <Link
-                  href="/pos"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Purchase Orders
-                </Link>
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
                     <img
@@ -76,12 +81,6 @@ export const Navigation: React.FC = () => {
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
                   Profile
-                </Link>
-                <Link
-                  href="/admin"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Admin
                 </Link>
                 <button
                   onClick={handleSignOut}
