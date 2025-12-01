@@ -48,6 +48,10 @@ export const Navigation: React.FC = () => {
             {user ? (
               <>
                 <Link
+                  href="/analytics/materials"
+                  className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                >
+                  Analytics
                   href="/accounting/export"
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
