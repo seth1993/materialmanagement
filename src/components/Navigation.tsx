@@ -109,6 +109,7 @@ export const Navigation: React.FC = () => {
 
                 <div className="flex items-center space-x-2 sm:space-x-3">
                 <Link
+                  href="/pos"
                   href="/analytics/materials"
                   className="text-sm text-gray-600 hover:text-gray-900 font-medium"
                 >
@@ -120,13 +121,13 @@ export const Navigation: React.FC = () => {
                   href="/"
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
-                  Materials
+                  Purchase Orders
                 </Link>
                 <Link
-                  href="/pos"
+                  href="/vendors"
                   className="text-sm text-gray-600 hover:text-gray-900"
                 >
-                  Purchase Orders
+                  Vendors
                 </Link>
                 <div className="flex items-center space-x-3">
                   {user.photoURL && (
