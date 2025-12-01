@@ -1,9 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access on all documents to any user signed in to the application
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Legacy materials - users can only access their own materials
+    match /materials/{materialId} {
+      allow read, write: if request.auth != null && (
+        // Legacy materials (direct user ownership)
+        request.auth.uid == resource.data.userId ||
+        // Project-based materials (project ownership)
+        (resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.userId == request.auth.uid)
+      );
+      allow create: if request.auth != null && (
+        // Legacy materials (direct user ownership)
+        request.auth.uid == request.resource.data.userId ||
+        // Project-based materials (project ownership)
+        (request.resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+         get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.userId == request.auth.uid)
+      );
+    }
+    
+    // Projects - users can only access their own projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Material Groups - users can only access groups in their projects
+    match /materialGroups/{groupId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.userId == request.auth.uid;
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.userId == request.auth.uid;
     }
   }
 }
