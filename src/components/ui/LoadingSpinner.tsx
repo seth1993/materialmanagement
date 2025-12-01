@@ -1,18 +1,13 @@
-import React from 'react';
-
 interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
   className?: string;
+  size?: 'sm' | 'md' | 'lg';
 }
 
-export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ 
-  size = 'md', 
-  className = '' 
-}) => {
+export function LoadingSpinner({ className = '', size = 'md' }: LoadingSpinnerProps) {
   const sizeClasses = {
-    sm: 'h-4 w-4',
-    md: 'h-8 w-8',
-    lg: 'h-12 w-12'
+    sm: 'w-4 h-4',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12',
   };
 
   return (
@@ -20,4 +15,4 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       <span className="sr-only">Loading...</span>
     </div>
   );
-};
+}
