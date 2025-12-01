@@ -16,6 +16,7 @@
     "prepare": "npm run type-check && npm run lint"
   },
   "dependencies": {
+    "@sentry/nextjs": "^8.40.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "clsx": "^2.1.1",
     "firebase": "^12.6.0",
